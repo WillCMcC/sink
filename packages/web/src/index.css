@@ -1,7 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Neutral scale */
+  --gray-50: #fafafa;
+  --gray-100: #f4f4f5;
+  --gray-200: #e4e4e7;
+  --gray-300: #d4d4d8;
+  --gray-400: #a1a1aa;
+  --gray-500: #71717a;
+  --gray-600: #52525b;
+  --gray-700: #3f3f46;
+  --gray-800: #27272a;
+  --gray-850: #1f1f23;
+  --gray-900: #18181b;
+  --gray-950: #09090b;
+
+  /* Status colors */
+  --status-clean: #22c55e;
+  --status-modified: #f59e0b;
+  --status-ahead: #3b82f6;
+  --status-behind: #f97316;
+  --status-conflict: #ef4444;
+  --status-synced: #8b5cf6;
+  --status-stash: #a855f7;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
-  @apply bg-gray-950 text-gray-100;
+  font-family: var(--font-sans);
+  background: var(--gray-950);
+  color: var(--gray-100);
+  line-height: 1.5;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gray-700);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-600);
+}
+
+/* Focus states */
+*:focus-visible {
+  outline: 2px solid var(--status-ahead);
+  outline-offset: 2px;
+}
+
+/* Custom utility classes */
+@layer utilities {
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Status bar indicators */
+  .status-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+  }
+
+  .status-bar-clean { background: var(--status-clean); }
+  .status-bar-modified { background: var(--status-modified); }
+  .status-bar-ahead { background: var(--status-ahead); }
+  .status-bar-behind { background: var(--status-behind); }
+  .status-bar-conflict { background: var(--status-conflict); }
+
+  /* Subtle animations */
+  .animate-in {
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Diff syntax highlighting */
+  .diff-add { color: #4ade80; }
+  .diff-remove { color: #f87171; }
+  .diff-meta { color: #60a5fa; }
+  .diff-context { color: var(--gray-500); }
+}
+
+/* Selection */
+::selection {
+  background: rgba(59, 130, 246, 0.3);
 }

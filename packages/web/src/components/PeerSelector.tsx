@@ -10,14 +10,24 @@ export function PeerSelector({ selectedPeer, onSelectPeer }: PeerSelectorProps) 
   const { data, isLoading, error } = usePeers();
 
   if (isLoading) {
-    return <div className="text-gray-500">Discovering peers...</div>;
+    return (
+      <div className="flex items-center gap-2 text-xs text-zinc-500">
+        <span className="w-2 h-2 rounded-full bg-zinc-600 animate-pulse" />
+        Discovering peers...
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-red-400">Failed to load peers</div>;
+    return (
+      <div className="flex items-center gap-2 text-xs text-red-400">
+        <span className="w-2 h-2 rounded-full bg-red-500" />
+        Connection error
+      </div>
+    );
   }
 
-  // Deduplicate peers by host:port (manual config + mDNS might overlap)
+  // Deduplicate peers by host:port
   const seenHostPorts = new Set<string>();
   const uniquePeers = data
     ? [data.self, ...data.peers].filter((peer) => {
@@ -29,33 +39,41 @@ export function PeerSelector({ selectedPeer, onSelectPeer }: PeerSelectorProps) 
     : [];
 
   return (
-    <div className="flex gap-2 flex-wrap">
+    <div className="flex items-center gap-1">
       <button
         onClick={() => onSelectPeer(null)}
-        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+        className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${
           selectedPeer === null
-            ? 'bg-blue-600 text-white'
-            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            ? 'bg-zinc-100 text-zinc-900'
+            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
         }`}
       >
-        All Machines
+        All
       </button>
-      {uniquePeers.map((peer) => (
-        <button
-          key={peer.id}
-          onClick={() => onSelectPeer(peer)}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            selectedPeer?.id === peer.id
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-          }`}
-        >
-          {peer.name}
-          {peer.id === data?.self.id && (
-            <span className="ml-1.5 text-xs opacity-60">(this)</span>
-          )}
-        </button>
-      ))}
+      <span className="w-px h-4 bg-zinc-800 mx-1" />
+      {uniquePeers.map((peer) => {
+        const isLocal = peer.id === data?.self.id;
+        const isSelected = selectedPeer?.id === peer.id;
+
+        return (
+          <button
+            key={peer.id}
+            onClick={() => onSelectPeer(peer)}
+            className={`group flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-all ${
+              isSelected
+                ? 'bg-zinc-100 text-zinc-900'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isLocal ? 'bg-emerald-500' : 'bg-blue-500'
+              }`}
+            />
+            {peer.name.replace('.local', '')}
+          </button>
+        );
+      })}
     </div>
   );
 }
