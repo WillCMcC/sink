@@ -17,7 +17,16 @@ export function PeerSelector({ selectedPeer, onSelectPeer }: PeerSelectorProps) 
     return <div className="text-red-400">Failed to load peers</div>;
   }
 
-  const allPeers = data ? [data.self, ...data.peers] : [];
+  // Deduplicate peers by host:port (manual config + mDNS might overlap)
+  const seenHostPorts = new Set<string>();
+  const uniquePeers = data
+    ? [data.self, ...data.peers].filter((peer) => {
+        const key = `${peer.host}:${peer.port}`;
+        if (seenHostPorts.has(key)) return false;
+        seenHostPorts.add(key);
+        return true;
+      })
+    : [];
 
   return (
     <div className="flex gap-2 flex-wrap">
@@ -31,7 +40,7 @@ export function PeerSelector({ selectedPeer, onSelectPeer }: PeerSelectorProps) 
       >
         All Machines
       </button>
-      {allPeers.map((peer) => (
+      {uniquePeers.map((peer) => (
         <button
           key={peer.id}
           onClick={() => onSelectPeer(peer)}

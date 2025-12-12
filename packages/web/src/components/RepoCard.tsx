@@ -2,10 +2,16 @@ import { useState } from 'react';
 import type { RepoWithStatus, Peer } from '../types';
 import { useGitOp } from '../hooks/useApi';
 
+interface RepoOnPeer {
+  peer: Peer;
+  repo: RepoWithStatus;
+}
+
 interface RepoCardProps {
   repo: RepoWithStatus;
   peer?: Peer;
   machineName?: string;
+  otherMachines?: RepoOnPeer[];
 }
 
 function formatTimeAgo(timestamp: number): string {
@@ -18,7 +24,7 @@ function formatTimeAgo(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
-export function RepoCard({ repo, peer, machineName }: RepoCardProps) {
+export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [opResult, setOpResult] = useState<{ success: boolean; message: string } | null>(null);
   const gitOp = useGitOp(peer?.host, peer?.port);
@@ -34,6 +40,19 @@ export function RepoCard({ repo, peer, machineName }: RepoCardProps) {
   };
 
   const { status, latestCommit } = repo;
+
+  // Find which machine has the most recent commit
+  const allVersions = [
+    { name: machineName || 'This machine', timestamp: latestCommit?.timestamp || 0, isThis: true },
+    ...otherMachines.map((om) => ({
+      name: om.peer.name,
+      timestamp: om.repo.latestCommit?.timestamp || 0,
+      isThis: false,
+    })),
+  ].sort((a, b) => b.timestamp - a.timestamp);
+
+  const mostRecent = allVersions[0];
+  const thisIsNewest = mostRecent?.isThis;
 
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
@@ -104,6 +123,11 @@ export function RepoCard({ repo, peer, machineName }: RepoCardProps) {
               {status.stashes} stash{status.stashes > 1 ? 'es' : ''}
             </span>
           )}
+          {otherMachines.length > 0 && !thisIsNewest && (
+            <span className="text-xs px-2 py-0.5 rounded bg-cyan-900/50 text-cyan-400">
+              {mostRecent.name} is newer
+            </span>
+          )}
         </div>
       </div>
 
@@ -118,6 +142,35 @@ export function RepoCard({ repo, peer, machineName }: RepoCardProps) {
               <div className="text-gray-500 text-xs mt-1">
                 by {latestCommit.author} &middot; {latestCommit.date}
               </div>
+            </div>
+          )}
+
+          {/* Show same repo on other machines */}
+          {otherMachines.length > 0 && (
+            <div className="mb-4 p-3 rounded-lg bg-gray-800/50 border border-gray-700">
+              <div className="text-xs text-gray-400 mb-2">Same repo on other machines:</div>
+              {otherMachines.map((om) => (
+                <div key={om.peer.id} className="flex items-center justify-between text-sm py-1">
+                  <span className="text-gray-300">{om.peer.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-gray-500">
+                      {om.repo.latestCommit?.shortHash || 'no commits'}
+                    </span>
+                    {om.repo.latestCommit && (
+                      <span className="text-xs text-gray-500">
+                        {formatTimeAgo(om.repo.latestCommit.timestamp)}
+                      </span>
+                    )}
+                    {om.repo.latestCommit &&
+                      latestCommit &&
+                      om.repo.latestCommit.timestamp > latestCommit.timestamp && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-cyan-900/50 text-cyan-400">
+                          newer
+                        </span>
+                      )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -154,14 +207,18 @@ export function RepoCard({ repo, peer, machineName }: RepoCardProps) {
             >
               Pull
             </button>
-            {status.ahead > 0 && (
+            {status.hasRemote && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   runOp('push');
                 }}
                 disabled={gitOp.isPending}
-                className="px-3 py-1.5 text-sm bg-green-800 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50"
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors disabled:opacity-50 ${
+                  status.ahead > 0
+                    ? 'bg-green-800 hover:bg-green-700'
+                    : 'bg-gray-800 hover:bg-gray-700'
+                }`}
               >
                 Push
               </button>

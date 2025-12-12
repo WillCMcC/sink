@@ -27,7 +27,7 @@ async function postJson<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
+    body: JSON.stringify(body ?? {}),
   });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}: ${res.statusText}`);
