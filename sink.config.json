@@ -1,0 +1,7 @@
+{
+  "scanPaths": ["~/Code"],
+  "ignorePaths": ["node_modules", ".git", "dist", "build"],
+  "manualRepos": [],
+  "port": 3847,
+  "machineName": ""
+}
