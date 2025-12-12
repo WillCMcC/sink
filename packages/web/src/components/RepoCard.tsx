@@ -25,6 +25,8 @@ function formatTimeAgo(timestamp: number): string {
 
 // Determine the primary status for the left bar indicator
 function getStatusType(status: RepoWithStatus['status'], hasNewerElsewhere: boolean): string {
+  if (status.conflicted > 0) return 'conflict';
+  if (status.mergeInProgress || status.rebaseInProgress) return 'conflict';
   if (status.behind > 0 && status.ahead > 0) return 'conflict';
   if (status.behind > 0) return 'behind';
   if (status.ahead > 0) return 'ahead';
@@ -35,7 +37,9 @@ function getStatusType(status: RepoWithStatus['status'], hasNewerElsewhere: bool
 
 export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<'actions' | 'history' | 'commit'>('actions');
+  const [activeTab, setActiveTab] = useState<'actions' | 'history' | 'commit' | 'conflicts'>('actions');
+  const [selectedConflictFile, setSelectedConflictFile] = useState<string | null>(null);
+  const [conflictContent, setConflictContent] = useState<{ ours: string; theirs: string; merged: string } | null>(null);
   const [opResult, setOpResult] = useState<{ success: boolean; message: string } | null>(null);
   const [commitMessage, setCommitMessage] = useState('');
   const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
@@ -89,7 +93,40 @@ export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCa
     }
   };
 
+  const loadConflictFile = async (filePath: string) => {
+    setSelectedConflictFile(filePath);
+    try {
+      const baseUrl = peer ? `http://${peer.host}:${peer.port}` : '';
+      const res = await fetch(`${baseUrl}/api/repos/${repo.id}/conflicts/file?file=${encodeURIComponent(filePath)}`);
+      const data = await res.json();
+      setConflictContent(data);
+    } catch {
+      setConflictContent(null);
+    }
+  };
+
+  const resolveConflict = async (filePath: string, resolution: 'ours' | 'theirs' | 'mark-resolved') => {
+    setOpResult(null);
+    try {
+      const baseUrl = peer ? `http://${peer.host}:${peer.port}` : '';
+      const res = await fetch(`${baseUrl}/api/repos/${repo.id}/conflicts/resolve-${resolution}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: filePath }),
+      });
+      const data = await res.json();
+      setOpResult(data);
+      if (data.success) {
+        setSelectedConflictFile(null);
+        setConflictContent(null);
+      }
+    } catch (err) {
+      setOpResult({ success: false, message: 'Failed to resolve conflict' });
+    }
+  };
+
   const { status, latestCommit } = repo;
+  const hasConflicts = status.conflicted > 0 || status.mergeInProgress || status.rebaseInProgress;
 
   // Check if another machine has newer commits
   const newerMachine = otherMachines.find(
@@ -133,6 +170,11 @@ export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCa
 
           {/* Status indicators - compact pills */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {hasConflicts && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded font-medium animate-pulse">
+                {status.conflicted > 0 ? `${status.conflicted} CONFLICTS` : 'CONFLICT'}
+              </span>
+            )}
             {status.ahead > 0 && (
               <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded font-mono font-medium">
                 +{status.ahead}
@@ -158,7 +200,7 @@ export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCa
                 {status.stashes}S
               </span>
             )}
-            {hasNewerElsewhere && (
+            {hasNewerElsewhere && !hasConflicts && (
               <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded font-medium">
                 {newerMachine?.peer.name} newer
               </span>
@@ -192,17 +234,31 @@ export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCa
         <div className="border-t border-zinc-800/50 animate-in">
           {/* Tabs */}
           <div className="flex gap-0 border-b border-zinc-800/50 text-xs">
-            {['actions', 'history', ...(status.isClean ? [] : ['commit'])].map((tab) => (
+            {[
+              'actions',
+              'history',
+              ...(hasConflicts ? ['conflicts'] : []),
+              ...(!status.isClean && !hasConflicts ? ['commit'] : []),
+            ].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as typeof activeTab)}
                 className={`px-4 py-2 font-medium capitalize transition-colors ${
                   activeTab === tab
-                    ? 'text-zinc-100 border-b-2 border-blue-500 -mb-px'
+                    ? tab === 'conflicts'
+                      ? 'text-red-400 border-b-2 border-red-500 -mb-px'
+                      : 'text-zinc-100 border-b-2 border-blue-500 -mb-px'
+                    : tab === 'conflicts'
+                    ? 'text-red-400/70 hover:text-red-400'
                     : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >
                 {tab}
+                {tab === 'conflicts' && status.conflicted > 0 && (
+                  <span className="ml-1.5 text-[10px] bg-red-500/20 px-1 rounded">
+                    {status.conflicted}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -431,6 +487,167 @@ export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCa
                     ))}
                   </pre>
                 )}
+              </div>
+            )}
+
+            {/* Conflicts Tab */}
+            {activeTab === 'conflicts' && hasConflicts && (
+              <div className="space-y-4">
+                {/* Conflict status banner */}
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-red-400">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span className="font-medium">
+                      {status.mergeInProgress ? 'Merge in progress' : status.rebaseInProgress ? 'Rebase in progress' : 'Conflicts detected'}
+                    </span>
+                  </div>
+                  {status.conflicted > 0 && (
+                    <div className="text-sm text-red-400/70 mt-1">
+                      {status.conflicted} file{status.conflicted > 1 ? 's' : ''} with conflicts
+                    </div>
+                  )}
+                </div>
+
+                {/* Conflicted files list */}
+                {status.conflictedFiles.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-[10px] uppercase tracking-wider text-zinc-600 font-medium mb-2">
+                      Conflicted Files
+                    </div>
+                    {status.conflictedFiles.map((file) => (
+                      <div
+                        key={file}
+                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
+                          selectedConflictFile === file
+                            ? 'bg-red-500/10 border border-red-500/30'
+                            : 'bg-zinc-800/50 hover:bg-zinc-800'
+                        }`}
+                        onClick={() => loadConflictFile(file)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-red-500" />
+                          <span className="text-sm font-mono text-zinc-300">{file}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); resolveConflict(file, 'ours'); }}
+                            className="px-2 py-1 text-[10px] font-medium bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+                            title="Keep our version"
+                          >
+                            Ours
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); resolveConflict(file, 'theirs'); }}
+                            className="px-2 py-1 text-[10px] font-medium bg-orange-600 hover:bg-orange-500 text-white rounded transition-colors"
+                            title="Keep their version"
+                          >
+                            Theirs
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); resolveConflict(file, 'mark-resolved'); }}
+                            className="px-2 py-1 text-[10px] font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded transition-colors"
+                            title="Mark as manually resolved"
+                          >
+                            Resolved
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Conflict content viewer */}
+                {selectedConflictFile && conflictContent && (
+                  <div className="space-y-3">
+                    <div className="text-xs text-zinc-500">
+                      Viewing: <span className="font-mono text-zinc-400">{selectedConflictFile}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-blue-400 font-medium mb-1">
+                          Ours (Current)
+                        </div>
+                        <pre className="text-xs bg-zinc-950 p-2 rounded max-h-48 overflow-auto font-mono text-zinc-400">
+                          {conflictContent.ours || '(empty)'}
+                        </pre>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-orange-400 font-medium mb-1">
+                          Theirs (Incoming)
+                        </div>
+                        <pre className="text-xs bg-zinc-950 p-2 rounded max-h-48 overflow-auto font-mono text-zinc-400">
+                          {conflictContent.theirs || '(empty)'}
+                        </pre>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium mb-1">
+                        Current File Content (with conflict markers)
+                      </div>
+                      <pre className="text-xs bg-zinc-950 p-2 rounded max-h-48 overflow-auto font-mono">
+                        {conflictContent.merged.split('\n').map((line, i) => (
+                          <div
+                            key={i}
+                            className={
+                              line.startsWith('<<<<<<<')
+                                ? 'text-blue-400 font-bold'
+                                : line.startsWith('>>>>>>>')
+                                ? 'text-orange-400 font-bold'
+                                : line.startsWith('=======')
+                                ? 'text-zinc-500 font-bold'
+                                : 'text-zinc-400'
+                            }
+                          >
+                            {line || ' '}
+                          </div>
+                        ))}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Result message */}
+                {opResult && (
+                  <div
+                    className={`text-sm px-3 py-2 rounded ${
+                      opResult.success
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                    }`}
+                  >
+                    {opResult.message}
+                  </div>
+                )}
+
+                {/* Abort/Continue actions */}
+                <div className="flex gap-2 pt-2 border-t border-zinc-800">
+                  {status.mergeInProgress && (
+                    <>
+                      <ActionButton onClick={() => runOp('merge/abort')} variant="warning">
+                        Abort Merge
+                      </ActionButton>
+                      {status.conflicted === 0 && (
+                        <ActionButton onClick={() => runOp('merge/continue')} variant="primary">
+                          Complete Merge
+                        </ActionButton>
+                      )}
+                    </>
+                  )}
+                  {status.rebaseInProgress && (
+                    <>
+                      <ActionButton onClick={() => runOp('rebase/abort')} variant="warning">
+                        Abort Rebase
+                      </ActionButton>
+                      {status.conflicted === 0 && (
+                        <ActionButton onClick={() => runOp('rebase/continue')} variant="primary">
+                          Continue Rebase
+                        </ActionButton>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>

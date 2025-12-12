@@ -14,6 +14,10 @@ export interface RepoStatus {
   stashes: number;
   isClean: boolean;
   hasRemote: boolean;
+  conflicted: number;
+  conflictedFiles: string[];
+  mergeInProgress: boolean;
+  rebaseInProgress: boolean;
 }
 
 export interface CommitInfo {

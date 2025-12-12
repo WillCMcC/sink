@@ -10,6 +10,10 @@ export interface RepoStatus {
   stashes: number;
   isClean: boolean;
   hasRemote: boolean;
+  conflicted: number;
+  conflictedFiles: string[];
+  mergeInProgress: boolean;
+  rebaseInProgress: boolean;
 }
 
 export interface CommitInfo {
@@ -52,6 +56,14 @@ export class GitService {
       // No stash support or empty
     }
 
+    // Check for merge/rebase in progress
+    const { existsSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const gitDir = join(repoPath, '.git');
+    const mergeInProgress = existsSync(join(gitDir, 'MERGE_HEAD'));
+    const rebaseInProgress = existsSync(join(gitDir, 'rebase-merge')) ||
+                             existsSync(join(gitDir, 'rebase-apply'));
+
     return {
       branch: status.current || 'HEAD',
       ahead: status.ahead,
@@ -62,6 +74,10 @@ export class GitService {
       stashes: stashCount,
       isClean: status.isClean(),
       hasRemote: status.tracking !== null,
+      conflicted: status.conflicted.length,
+      conflictedFiles: status.conflicted,
+      mergeInProgress,
+      rebaseInProgress,
     };
   }
 
@@ -357,6 +373,141 @@ export class GitService {
       return await git.diff(['--', filePath]);
     } catch {
       return '';
+    }
+  }
+
+  // Conflict resolution methods
+  async resolveConflictOurs(repoPath: string, filePath: string): Promise<GitOpResult> {
+    try {
+      const git = this.getGit(repoPath);
+      await git.checkout(['--ours', '--', filePath]);
+      await git.add([filePath]);
+      return {
+        success: true,
+        message: `Resolved ${filePath} using our version`,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to resolve conflict',
+      };
+    }
+  }
+
+  async resolveConflictTheirs(repoPath: string, filePath: string): Promise<GitOpResult> {
+    try {
+      const git = this.getGit(repoPath);
+      await git.checkout(['--theirs', '--', filePath]);
+      await git.add([filePath]);
+      return {
+        success: true,
+        message: `Resolved ${filePath} using their version`,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to resolve conflict',
+      };
+    }
+  }
+
+  async markResolved(repoPath: string, filePath: string): Promise<GitOpResult> {
+    try {
+      const git = this.getGit(repoPath);
+      await git.add([filePath]);
+      return {
+        success: true,
+        message: `Marked ${filePath} as resolved`,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to mark as resolved',
+      };
+    }
+  }
+
+  async abortMerge(repoPath: string): Promise<GitOpResult> {
+    try {
+      const git = this.getGit(repoPath);
+      await git.merge(['--abort']);
+      return {
+        success: true,
+        message: 'Merge aborted',
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to abort merge',
+      };
+    }
+  }
+
+  async continueMerge(repoPath: string): Promise<GitOpResult> {
+    try {
+      const git = this.getGit(repoPath);
+      // After resolving all conflicts, commit to complete the merge
+      await git.commit('Merge conflict resolved');
+      return {
+        success: true,
+        message: 'Merge completed',
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to complete merge',
+      };
+    }
+  }
+
+  async continueRebase(repoPath: string): Promise<GitOpResult> {
+    try {
+      const git = this.getGit(repoPath);
+      await git.rebase(['--continue']);
+      return {
+        success: true,
+        message: 'Rebase continued',
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to continue rebase',
+      };
+    }
+  }
+
+  async getConflictedFileContent(repoPath: string, filePath: string): Promise<{
+    ours: string;
+    theirs: string;
+    merged: string;
+  }> {
+    const git = this.getGit(repoPath);
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+
+    try {
+      // Get the current conflicted content
+      const merged = readFileSync(join(repoPath, filePath), 'utf-8');
+
+      // Get ours and theirs versions
+      let ours = '';
+      let theirs = '';
+
+      try {
+        ours = await git.show([':2:' + filePath]); // Stage 2 = ours
+      } catch {
+        ours = '(not available)';
+      }
+
+      try {
+        theirs = await git.show([':3:' + filePath]); // Stage 3 = theirs
+      } catch {
+        theirs = '(not available)';
+      }
+
+      return { ours, theirs, merged };
+    } catch {
+      return { ours: '', theirs: '', merged: '' };
     }
   }
 }

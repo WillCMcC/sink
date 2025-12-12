@@ -203,4 +203,97 @@ export function registerGitRoutes(
       return { diff };
     }
   );
+
+  // Conflict resolution endpoints
+
+  // Get conflicted file content (ours, theirs, merged)
+  app.get<{ Params: { id: string }; Querystring: { file: string } }>(
+    '/api/repos/:id/conflicts/file',
+    async (request, reply) => {
+      const repo = getRepo(request.params.id);
+      if (!repo) {
+        return reply.status(404).send({ error: 'Repo not found' });
+      }
+      const { file } = request.query;
+      if (!file) {
+        return reply.status(400).send({ error: 'File path required' });
+      }
+      return gitService.getConflictedFileContent(repo.path, file);
+    }
+  );
+
+  // Resolve conflict using "ours" (our version)
+  app.post<{ Params: { id: string }; Body: { file: string } }>(
+    '/api/repos/:id/conflicts/resolve-ours',
+    async (request, reply) => {
+      const repo = getRepo(request.params.id);
+      if (!repo) {
+        return reply.status(404).send({ error: 'Repo not found' });
+      }
+      const { file } = request.body || {};
+      if (!file) {
+        return reply.status(400).send({ error: 'File path required' });
+      }
+      return gitService.resolveConflictOurs(repo.path, file);
+    }
+  );
+
+  // Resolve conflict using "theirs" (their version)
+  app.post<{ Params: { id: string }; Body: { file: string } }>(
+    '/api/repos/:id/conflicts/resolve-theirs',
+    async (request, reply) => {
+      const repo = getRepo(request.params.id);
+      if (!repo) {
+        return reply.status(404).send({ error: 'Repo not found' });
+      }
+      const { file } = request.body || {};
+      if (!file) {
+        return reply.status(400).send({ error: 'File path required' });
+      }
+      return gitService.resolveConflictTheirs(repo.path, file);
+    }
+  );
+
+  // Mark file as resolved (after manual edit)
+  app.post<{ Params: { id: string }; Body: { file: string } }>(
+    '/api/repos/:id/conflicts/mark-resolved',
+    async (request, reply) => {
+      const repo = getRepo(request.params.id);
+      if (!repo) {
+        return reply.status(404).send({ error: 'Repo not found' });
+      }
+      const { file } = request.body || {};
+      if (!file) {
+        return reply.status(400).send({ error: 'File path required' });
+      }
+      return gitService.markResolved(repo.path, file);
+    }
+  );
+
+  // Abort merge
+  app.post<{ Params: { id: string } }>('/api/repos/:id/merge/abort', async (request, reply) => {
+    const repo = getRepo(request.params.id);
+    if (!repo) {
+      return reply.status(404).send({ error: 'Repo not found' });
+    }
+    return gitService.abortMerge(repo.path);
+  });
+
+  // Continue/complete merge (after resolving all conflicts)
+  app.post<{ Params: { id: string } }>('/api/repos/:id/merge/continue', async (request, reply) => {
+    const repo = getRepo(request.params.id);
+    if (!repo) {
+      return reply.status(404).send({ error: 'Repo not found' });
+    }
+    return gitService.continueMerge(repo.path);
+  });
+
+  // Continue rebase (after resolving conflicts)
+  app.post<{ Params: { id: string } }>('/api/repos/:id/rebase/continue', async (request, reply) => {
+    const repo = getRepo(request.params.id);
+    if (!repo) {
+      return reply.status(404).send({ error: 'Repo not found' });
+    }
+    return gitService.continueRebase(repo.path);
+  });
 }
