@@ -1,4 +1,4 @@
-import Bonjour, { Service, Browser } from 'bonjour-service';
+import { Bonjour, Service, Browser } from 'bonjour-service';
 import { EventEmitter } from 'node:events';
 import type { Config } from '../config.js';
 
