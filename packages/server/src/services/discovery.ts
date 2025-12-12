@@ -77,6 +77,20 @@ export class DiscoveryService extends EventEmitter {
       }
     });
 
+    // Add manually configured peers
+    for (const peerConfig of this.config.peers) {
+      const peer: Peer = {
+        id: `${peerConfig.name}-${peerConfig.port}`,
+        name: peerConfig.name,
+        host: peerConfig.host,
+        port: peerConfig.port,
+        addresses: [],
+        lastSeen: Date.now(),
+      };
+      this.peers.set(peer.id, peer);
+      console.log(`Added configured peer: ${peer.name} at ${peer.host}:${peer.port}`);
+    }
+
     console.log('Discovery service started');
   }
 

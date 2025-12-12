@@ -3,13 +3,22 @@ import { homedir, hostname } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 
+const PeerSchema = z.object({
+  name: z.string(),
+  host: z.string(),
+  port: z.number().default(3847),
+});
+
 const ConfigSchema = z.object({
   scanPaths: z.array(z.string()).default(['~/Code']),
   ignorePaths: z.array(z.string()).default(['node_modules', '.git', 'dist', 'build']),
   manualRepos: z.array(z.string()).default([]),
+  peers: z.array(PeerSchema).default([]),
   port: z.number().default(3847),
   machineName: z.string().default(''),
 });
+
+export type PeerConfig = z.infer<typeof PeerSchema>;
 
 export type Config = z.infer<typeof ConfigSchema>;
 
