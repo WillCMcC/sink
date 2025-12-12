@@ -45,6 +45,8 @@ export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCa
   const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
   const [diffContent, setDiffContent] = useState<string | null>(null);
   const [loadingDiff, setLoadingDiff] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  const [deployOutput, setDeployOutput] = useState<string | null>(null);
 
   const gitOp = useGitOp(peer?.host, peer?.port);
   const { data: commits } = useRepoLog(expanded ? repo.id : '', peer?.host, peer?.port);
@@ -122,6 +124,29 @@ export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCa
       }
     } catch (err) {
       setOpResult({ success: false, message: 'Failed to resolve conflict' });
+    }
+  };
+
+  const runDeploy = async () => {
+    setDeploying(true);
+    setDeployOutput(null);
+    setOpResult(null);
+    try {
+      const baseUrl = peer ? `http://${peer.host}:${peer.port}` : '';
+      const res = await fetch(`${baseUrl}/api/repos/${repo.id}/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      setOpResult({ success: data.success, message: data.message });
+      if (data.output) {
+        setDeployOutput(data.output);
+      }
+    } catch (err) {
+      setOpResult({ success: false, message: err instanceof Error ? err.message : 'Deploy failed' });
+    } finally {
+      setDeploying(false);
     }
   };
 
@@ -361,7 +386,28 @@ export function RepoCard({ repo, peer, machineName, otherMachines = [] }: RepoCa
                       Pop Stash
                     </ActionButton>
                   )}
+                  {repo.hasCaprover && (
+                    <ActionButton
+                      onClick={runDeploy}
+                      disabled={deploying}
+                      variant="primary"
+                    >
+                      {deploying ? 'Deploying...' : 'Deploy'}
+                    </ActionButton>
+                  )}
                 </div>
+
+                {/* Deploy output */}
+                {deployOutput && (
+                  <div className="mt-3">
+                    <div className="text-[10px] uppercase tracking-wider text-zinc-600 font-medium mb-1">
+                      Deploy Output
+                    </div>
+                    <pre className="text-xs bg-zinc-950 p-3 rounded-lg overflow-auto max-h-48 font-mono text-zinc-400 whitespace-pre-wrap">
+                      {deployOutput}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
 

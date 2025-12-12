@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { PeerSelector } from './components/PeerSelector';
 import { RepoList } from './components/RepoList';
+import { useWebSocket } from './hooks/useWebSocket';
 import type { Peer } from './types';
 
 function App() {
   const [selectedPeer, setSelectedPeer] = useState<Peer | null>(null);
+
+  // Connect to WebSocket for live updates
+  useWebSocket(selectedPeer?.host, selectedPeer?.port);
 
   return (
     <div className="min-h-screen bg-zinc-950">

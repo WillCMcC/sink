@@ -32,6 +32,7 @@ export interface CommitInfo {
 export interface RepoWithStatus extends RepoInfo {
   status: RepoStatus;
   latestCommit: CommitInfo | null;
+  hasCaprover?: boolean;
 }
 
 export interface Peer {

@@ -1,10 +1,18 @@
 import { FastifyInstance } from 'fastify';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawn } from 'node:child_process';
 import { RepoScanner, RepoInfo } from '../services/scanner.js';
 import { GitService, RepoStatus, CommitInfo, BranchInfo } from '../services/git.js';
 
 export interface RepoWithStatus extends RepoInfo {
   status: RepoStatus;
   latestCommit: CommitInfo | null;
+  hasCaprover?: boolean;
+}
+
+function hasCaproverConfig(repoPath: string): boolean {
+  return existsSync(join(repoPath, 'captain-definition'));
 }
 
 export function registerRepoRoutes(
@@ -29,7 +37,12 @@ export function registerRepoRoutes(
           gitService.getStatus(repo.path),
           gitService.getLatestCommit(repo.path),
         ]);
-        detailed.push({ ...repo, status, latestCommit });
+        detailed.push({
+          ...repo,
+          status,
+          latestCommit,
+          hasCaprover: hasCaproverConfig(repo.path),
+        });
       } catch (err) {
         // Skip repos that error
         console.warn(`Error getting status for ${repo.path}:`, err);
@@ -107,5 +120,55 @@ export function registerRepoRoutes(
   app.post('/api/repos/scan', async () => {
     const repos = await scanner.scan(true);
     return { count: repos.length, repos };
+  });
+
+  // Deploy to CapRover
+  app.post<{ Params: { id: string } }>('/api/repos/:id/deploy', async (request, reply) => {
+    const repo = scanner.getRepoById(request.params.id);
+    if (!repo) {
+      return reply.status(404).send({ error: 'Repo not found' });
+    }
+
+    if (!hasCaproverConfig(repo.path)) {
+      return reply.status(400).send({ error: 'No captain-definition found in repo' });
+    }
+
+    return new Promise((resolve) => {
+      const proc = spawn('caprover', ['deploy', '--default'], {
+        cwd: repo.path,
+        env: { ...process.env },
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      proc.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true, message: 'Deploy completed', output: stdout });
+        } else {
+          resolve({
+            success: false,
+            message: `Deploy failed with code ${code}`,
+            output: stdout + stderr,
+          });
+        }
+      });
+
+      proc.on('error', (err) => {
+        resolve({
+          success: false,
+          message: `Failed to run caprover: ${err.message}`,
+          output: '',
+        });
+      });
+    });
   });
 }
