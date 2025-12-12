@@ -126,4 +126,81 @@ export function registerGitRoutes(
       return gitService.reset(repo.path, hard);
     }
   );
+
+  // Get changed files
+  app.get<{ Params: { id: string } }>('/api/repos/:id/changes', async (request, reply) => {
+    const repo = getRepo(request.params.id);
+    if (!repo) {
+      return reply.status(404).send({ error: 'Repo not found' });
+    }
+    return gitService.getChangedFiles(repo.path);
+  });
+
+  // Stage all
+  app.post<{ Params: { id: string } }>('/api/repos/:id/stage', async (request, reply) => {
+    const repo = getRepo(request.params.id);
+    if (!repo) {
+      return reply.status(404).send({ error: 'Repo not found' });
+    }
+    return gitService.stageAll(repo.path);
+  });
+
+  // Commit
+  app.post<{ Params: { id: string }; Body: { message: string } }>(
+    '/api/repos/:id/commit',
+    async (request, reply) => {
+      const repo = getRepo(request.params.id);
+      if (!repo) {
+        return reply.status(404).send({ error: 'Repo not found' });
+      }
+
+      const { message } = request.body || {};
+      if (!message) {
+        return reply.status(400).send({ error: 'Commit message required' });
+      }
+
+      return gitService.commit(repo.path, message);
+    }
+  );
+
+  // Stage all and commit
+  app.post<{ Params: { id: string }; Body: { message: string } }>(
+    '/api/repos/:id/commit-all',
+    async (request, reply) => {
+      const repo = getRepo(request.params.id);
+      if (!repo) {
+        return reply.status(404).send({ error: 'Repo not found' });
+      }
+
+      const { message } = request.body || {};
+      if (!message) {
+        return reply.status(400).send({ error: 'Commit message required' });
+      }
+
+      return gitService.stageAndCommit(repo.path, message);
+    }
+  );
+
+  // Get working directory diff
+  app.get<{ Params: { id: string } }>('/api/repos/:id/diff', async (request, reply) => {
+    const repo = getRepo(request.params.id);
+    if (!repo) {
+      return reply.status(404).send({ error: 'Repo not found' });
+    }
+    const diff = await gitService.getWorkingDiff(repo.path);
+    return { diff };
+  });
+
+  // Get commit diff
+  app.get<{ Params: { id: string; hash: string } }>(
+    '/api/repos/:id/commits/:hash/diff',
+    async (request, reply) => {
+      const repo = getRepo(request.params.id);
+      if (!repo) {
+        return reply.status(404).send({ error: 'Repo not found' });
+      }
+      const diff = await gitService.getCommitDiff(repo.path, request.params.hash);
+      return { diff };
+    }
+  );
 }

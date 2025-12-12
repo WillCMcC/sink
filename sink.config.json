@@ -3,7 +3,7 @@
   "ignorePaths": ["node_modules", ".git", "dist", "build"],
   "manualRepos": [],
   "peers": [
-    { "name": "Mac Mini", "host": "wills-mac-mini", "port": 3847 }
+    { "name": "Mac Mini", "host": "wills-mac-mini-2.local", "port": 3847 }
   ],
   "port": 3847,
   "machineName": ""

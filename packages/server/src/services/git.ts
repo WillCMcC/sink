@@ -267,4 +267,96 @@ export class GitService {
       };
     }
   }
+
+  async getChangedFiles(repoPath: string): Promise<{
+    staged: string[];
+    modified: string[];
+    untracked: string[];
+  }> {
+    const git = this.getGit(repoPath);
+    const status = await git.status();
+    return {
+      staged: status.staged,
+      modified: [...status.modified, ...status.deleted],
+      untracked: status.not_added,
+    };
+  }
+
+  async stageAll(repoPath: string): Promise<GitOpResult> {
+    try {
+      const git = this.getGit(repoPath);
+      await git.add(['-A']);
+      return {
+        success: true,
+        message: 'Staged all changes',
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Stage failed',
+      };
+    }
+  }
+
+  async commit(repoPath: string, message: string): Promise<GitOpResult> {
+    try {
+      const git = this.getGit(repoPath);
+      const result = await git.commit(message);
+      return {
+        success: true,
+        message: `Committed: ${result.commit}`,
+        data: result,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Commit failed',
+      };
+    }
+  }
+
+  async stageAndCommit(repoPath: string, message: string): Promise<GitOpResult> {
+    try {
+      const git = this.getGit(repoPath);
+      await git.add(['-A']);
+      const result = await git.commit(message);
+      return {
+        success: true,
+        message: `Committed: ${result.commit}`,
+        data: result,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Commit failed',
+      };
+    }
+  }
+
+  async getCommitDiff(repoPath: string, commitHash: string): Promise<string> {
+    const git = this.getGit(repoPath);
+    // Show diff for a specific commit
+    const diff = await git.show([commitHash, '--stat', '--patch']);
+    return diff;
+  }
+
+  async getWorkingDiff(repoPath: string): Promise<string> {
+    const git = this.getGit(repoPath);
+    // Show diff of working directory (staged + unstaged)
+    const stagedDiff = await git.diff(['--cached']);
+    const unstagedDiff = await git.diff();
+    return stagedDiff + (stagedDiff && unstagedDiff ? '\n' : '') + unstagedDiff;
+  }
+
+  async getFileDiff(repoPath: string, filePath: string): Promise<string> {
+    const git = this.getGit(repoPath);
+    try {
+      // Try staged first, then unstaged
+      const stagedDiff = await git.diff(['--cached', '--', filePath]);
+      if (stagedDiff) return stagedDiff;
+      return await git.diff(['--', filePath]);
+    } catch {
+      return '';
+    }
+  }
 }
